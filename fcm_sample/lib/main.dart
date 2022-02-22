@@ -3,6 +3,7 @@ import 'package:fcm_sample/webviewscreen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,26 +67,43 @@ class _HomePageState extends State<HomePage> {
     // Also handle any interaction when the app is in the background via a
     // Stream listener
     FirebaseMessaging.onMessageOpenedApp.listen(_handleMessage);
-  }
 
-  void _handleMessage(RemoteMessage message) {
-    print('onmessageapp $message');
-    if (message.data['type'] == 'chat') {
-      // Navigator.pushNamed(context, '/chat',
-      //   arguments: ChatArguments(message),
-      // );
-    }
-  }
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'high_importance_channel', // id
+      'High Importance Notifications', // title
+      description:
+          'This channel is used for important notifications.', // description
+      importance: Importance.max,
+    );
 
-  @override
-  void initState() {
-    setupInteractedMessage();
-    messaging = FirebaseMessaging.instance;
-    messaging.getToken().then((value) {
-      print(value);
-    });
+    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+        FlutterLocalNotificationsPlugin();
 
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
     FirebaseMessaging.onMessage.listen((RemoteMessage event) {
+      RemoteNotification? notification = event.notification;
+      AndroidNotification? android = event.notification?.android;
+
+      // If `onMessage` is triggered with a notification, construct our own
+      // local notification to show to users using the created channel.
+      if (notification != null && android != null) {
+        flutterLocalNotificationsPlugin.show(
+            notification.hashCode,
+            notification.title,
+            notification.body,
+            NotificationDetails(
+              android: AndroidNotificationDetails(
+                channel.id,
+                channel.name,
+                channelDescription: channel.description,
+                icon: android.smallIcon,
+                // other properties...
+              ),
+            ));
+      }
       print("message recieved");
       print(event.notification!.body);
       print("event data payload : ${event.data.values}");
@@ -106,17 +124,59 @@ class _HomePageState extends State<HomePage> {
             );
           });
     });
+  }
+
+  void _handleMessage(RemoteMessage message) {
+    print('onmessageapp $message');
+    if (message.data['type'] == 'chat') {
+      // Navigator.pushNamed(context, '/chat',
+      //   arguments: ChatArguments(message),
+      // );
+    }
+  }
+
+  @override
+  void initState() {
+    setupInteractedMessage();
+    messaging = FirebaseMessaging.instance;
+    messaging.getToken().then((value) {
+      print(value);
+    });
 
     super.initState();
   }
 
+  final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('FCM Test'),
       ),
-      body: Container(),
+      body: Center(
+        child: ElevatedButton(
+          child: Text('show local notification'),
+          onPressed: () async {
+            var androidPlatformChannelSpecifics =
+                const AndroidNotificationDetails(
+              'your channel id',
+              'your channel name',
+              channelDescription: 'your channel description',
+              importance: Importance.max,
+              priority: Priority.high,
+              icon: '@mipmap/ic_launcher',
+            );
+            var iOSPlatformChannelSpecifics = IOSNotificationDetails();
+            var platformChannelSpecifics = NotificationDetails(
+                android: androidPlatformChannelSpecifics,
+                iOS: iOSPlatformChannelSpecifics);
+            await _flutterLocalNotificationsPlugin.show(
+                1, 'plain title', 'plain body', platformChannelSpecifics,
+                payload: 'item x');
+          },
+        ),
+      ),
     );
   }
 }
