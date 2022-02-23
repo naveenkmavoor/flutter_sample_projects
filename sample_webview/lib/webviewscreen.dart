@@ -104,27 +104,26 @@ class HomepageState extends State<Homepage> {
       _controller.goBack();
       return Future.value(false);
     } else {
-      showDialog(
+      bool val = await showDialog(
           context: context,
           builder: (context) => AlertDialog(
-                title: Text('Do you want to exit monitor app?'),
+                title: const Text('Do you want to exit monitor app?'),
                 actions: <Widget>[
                   FlatButton(
                     onPressed: () {
-                      Navigator.of(context).pop();
+                      Navigator.of(context).pop(false);
                     },
-                    child: Text('No'),
+                    child: const Text('No'),
                   ),
                   FlatButton(
                     onPressed: () {
-                      Navigator.of(context).pop();
-                      Navigator.of(context).pop();
+                      Navigator.of(context).pop(true);
                     },
-                    child: Text('Yes'),
+                    child: const Text('Yes'),
                   ),
                 ],
               ));
-      return Future.value(true);
+      return Future.value(val);
     }
   }
 }
