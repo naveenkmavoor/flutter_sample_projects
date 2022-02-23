@@ -1,9 +1,15 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:fcm_sample/firebase_options.dart';
 import 'package:fcm_sample/webviewscreen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:http/http.dart' as http;
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,6 +55,8 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   late FirebaseMessaging messaging;
+  String? _token;
+  int _messageCount = 0;
 
   Future<void> setupInteractedMessage() async {
     // Get any messages which caused the application to open from
@@ -83,12 +91,13 @@ class _HomePageState extends State<HomePage> {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
+
+    //when fcm sends push notification and if the app is in the foreground the below code will be executed
     FirebaseMessaging.onMessage.listen((RemoteMessage event) {
       RemoteNotification? notification = event.notification;
       AndroidNotification? android = event.notification?.android;
 
-      // If `onMessage` is triggered with a notification, construct our own
-      // local notification to show to users using the created channel.
+      //we create a custom notification channel which lets us explicitly allow to show notificaition even when the app is in the foreground but for default notification channel of firebase it's not possible
       if (notification != null && android != null) {
         flutterLocalNotificationsPlugin.show(
             notification.hashCode,
@@ -102,8 +111,11 @@ class _HomePageState extends State<HomePage> {
                 icon: android.smallIcon,
                 // other properties...
               ),
-            ));
+            ),
+            payload: json.encode(event.data));
       }
+      //the above code makes notification pop on the notification screen of android app and when the user press on that notification then the onMessageOpenApp is triggered with the value we provided above.
+
       print("message recieved");
       print(event.notification!.body);
       print("event data payload : ${event.data.values}");
@@ -135,15 +147,39 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  //scheduled notification
+  Future<void> _scheduleNotification(RemoteNotification message,
+      AndroidNotificationChannel channel, String? iconName) async {
+    await _flutterLocalNotificationsPlugin.zonedSchedule(
+        message.hashCode,
+        message.title,
+        message.body,
+        tz.TZDateTime.now(tz.local).add(const Duration(seconds: 3)),
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            channel.id,
+            channel.name,
+            channelDescription: channel.description,
+            icon: iconName,
+            // other properties...
+          ),
+        ),
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        payload: "",
+        androidAllowWhileIdle: true);
+  }
+
   @override
   void initState() {
     setupInteractedMessage();
     messaging = FirebaseMessaging.instance;
-    messaging.getToken().then((value) {
-      print(value);
-    });
-
+    _getToken();
     super.initState();
+  }
+
+  Future<void> _getToken() async {
+    _token = await messaging.getToken();
   }
 
   final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin =
@@ -155,26 +191,34 @@ class _HomePageState extends State<HomePage> {
         title: const Text('FCM Test'),
       ),
       body: Center(
-        child: ElevatedButton(
-          child: Text('show local notification'),
-          onPressed: () async {
-            var androidPlatformChannelSpecifics =
-                const AndroidNotificationDetails(
-              'your channel id',
-              'your channel name',
-              channelDescription: 'your channel description',
-              importance: Importance.max,
-              priority: Priority.high,
-              icon: '@mipmap/ic_launcher',
-            );
-            var iOSPlatformChannelSpecifics = IOSNotificationDetails();
-            var platformChannelSpecifics = NotificationDetails(
-                android: androidPlatformChannelSpecifics,
-                iOS: iOSPlatformChannelSpecifics);
-            await _flutterLocalNotificationsPlugin.show(
-                1, 'plain title', 'plain body', platformChannelSpecifics,
-                payload: 'item x');
-          },
+        child: Column(
+          children: [
+            ElevatedButton(
+              child: Text('show local notification'),
+              onPressed: () async {
+                //sending local push notification to the app itself
+                var androidPlatformChannelSpecifics =
+                    const AndroidNotificationDetails(
+                  'parentry',
+                  'Important Notifications',
+                  channelDescription:
+                      'This channel is used for important notifications',
+                  importance: Importance.max,
+                  priority: Priority.high,
+                  icon: '@mipmap/ic_launcher',
+                );
+                var iOSPlatformChannelSpecifics = IOSNotificationDetails();
+                var platformChannelSpecifics = NotificationDetails(
+                    android: androidPlatformChannelSpecifics,
+                    iOS: iOSPlatformChannelSpecifics);
+                await _flutterLocalNotificationsPlugin.show(
+                    1, 'plain title', 'plain body', platformChannelSpecifics,
+                    payload: 'item x');
+              },
+            ),
+            ElevatedButton(
+                onPressed: () {}, child: const Text('send push message')),
+          ],
         ),
       ),
     );
